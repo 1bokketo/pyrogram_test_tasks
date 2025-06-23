@@ -1,0 +1,42 @@
+# тестовая реализация модератора для группы (2024)
+
+from pyrogram import Client
+from google.oauth2 import service_account
+import gspread
+
+# Авторизация в Google Sheets
+credentials = service_account.Credentials.from_service_account_file("credentials.json")
+gc = gspread.authorize(credentials)
+sheet = gc.open("Учебные группы").sheet1
+
+@app.on_message(filters.command("create_study_group"))
+async def create_study_group(client, message):
+    # Получение данных 
+    data = sheet.get_all_records()
+    
+    for row in data:
+        group_name = row["Название группы"]
+        curator_id = row["ID куратора"]
+        students = row["ID студентов"].split(",")
+        
+        # Создание чата
+        chat = await app.create_supergroup(
+            title=group_name,
+            description=f" *название учебной группы*. Админ/куратор: {curator_id}"
+        )
+        
+        # Назначение куратора с префом
+        await app.promote_chat_member(
+            chat.id,
+            curator_id,
+            privileges=ChatPrivileges(
+                can_manage_chat=True,
+                can_delete_messages=True
+            )
+        )
+        
+        # Установка префикса (Pyrogram 2.0+)
+        await app.set_administrator_title(chat.id, curator_id, "Куратор")
+        
+        # Добавление студентов
+        await app.add_chat_members(chat.id, students)
