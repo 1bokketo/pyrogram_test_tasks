@@ -1,0 +1,59 @@
+from pyrogram import Client, filters
+from pyrogram.types import ChatPrivileges, ChatPermissions
+
+app = Client("support_bot")
+
+# Пример данных из CRM (на деле получаем через API/webhook)
+support_request = {
+    "request_id": 12345,
+    "manager_id": 12345,  # ID реального менеджера
+    "client_id": 12345    # ID клиента
+}
+
+@app.on_message(filters.command("create_support_chat"))
+async def create_support_chat(client, message):
+    # 1. Создание чата
+    chat = await app.create_supergroup(
+        title=f"Поддержка: Заявка #{support_request['request_id']}",
+        description="Чат для решения вопроса клиента"
+    )
+
+    # 2. Добавление менеджера с админ-правами
+    await app.promote_chat_member(
+        chat.id,
+        support_request["manager_id"],
+        privileges=ChatPrivileges(
+            can_manage_chat=True,
+            can_delete_messages=True,
+            can_restrict_members=True,
+            can_invite_users=True
+        )
+    )
+
+    # 3. Добавление клиента с ограниченными правами
+    await app.add_chat_members(chat.id, support_request["client_id"])
+    await app.set_chat_permissions(
+        chat.id,
+        permissions=ChatPermissions(
+            can_send_messages=True,  # Клиент может писать
+            can_send_media_messages=False,  # Но не медиа
+            can_pin_messages=False
+        )
+    )
+
+    # 4. Отправка данных в CRM
+    await send_to_crm(chat.id, support_request)
+
+async def send_to_crm(chat_id, request):
+    """Отправка данных в CRM через API"""
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        await session.post(
+            "https://your-crm.com/api/support_chat",
+            json={
+                "chat_id": chat_id,
+                "manager_id": request["manager_id"],
+                "client_id": request["client_id"],
+                "chat_link": f"https://t.me/c/{str(chat_id).replace('-', '')}"  # Генерация ссылки
+            }
+        )
